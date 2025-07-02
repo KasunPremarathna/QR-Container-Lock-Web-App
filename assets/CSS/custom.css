@@ -1,0 +1,11 @@
+/* File Path: qr-container-lock/assets/css/custom.css */
+
+/* Custom styles for QR Container Lock */
+.table-container {
+    overflow-x: auto;
+}
+
+.table-container table {
+    min-width: 100%;
+}
+?>
