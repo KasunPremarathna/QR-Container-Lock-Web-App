@@ -1,6 +1,13 @@
 <?php
 // File Path: qr-container-lock/pages/company/create_container.php
 
+// Set session ini settings before session_start
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
+    ini_set('session.cookie_secure', 1);
+}
+
 // Start session with error handling
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
@@ -29,7 +36,7 @@ if (!isset($pdo) || !$pdo instanceof PDO) {
     exit;
 }
 
-// Ensure upload directories are writable (re-check to handle config.php creation)
+// Ensure upload directories are writable
 $dirs = [LOCAL_INVOICES_DIR, LOCAL_PHOTOS_DIR, LOCAL_VIDEOS_DIR];
 foreach ($dirs as $dir) {
     if (!is_writable($dir)) {
@@ -335,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <input type="text" name="destination" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" required>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Invoice (PDF, max <?php echo htmlspecialchars($plan['invoice_size_limit_mb']); ?> MB)</label>
+                    <label class="block text-sm font-medium text-gray-700">Invoice (PDF, max <?php echo (MAX_INVOICE_SIZE / (1024 * 1024)); ?> MB)</label>
                     <input type="file" name="invoice" class="mt-1 block w-full text-gray-500" accept=".pdf">
                 </div>
                 <div>

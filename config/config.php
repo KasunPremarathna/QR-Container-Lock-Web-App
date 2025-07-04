@@ -7,8 +7,8 @@ define('DB_NAME', 'kasunpre_qr_container_lock');
 define('DB_USER', 'kasunpre_qr_container_lock');
 define('DB_PASS', 'Kasun0147');
 
-// Upload directories (adjusted to match create_container.php structure)
-define('UPLOAD_DIR', __DIR__ . '/../../Uploads/');
+// Upload directories
+define('UPLOAD_DIR', __DIR__ . '/uploads/');
 define('INVOICES_DIR', UPLOAD_DIR . 'invoices/');
 define('PHOTOS_DIR', UPLOAD_DIR . 'photos/');
 define('VIDEOS_DIR', UPLOAD_DIR . 'videos/');
@@ -45,18 +45,10 @@ try {
     die("Database connection failed: " . $e->getMessage());
 }
 
-// Base URL for QR codes (adjusted for local development)
+// Base URL for QR codes
 define('BASE_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/');
-
-// Security settings (adjusted for local development)
-ini_set('session.cookie_httponly', 1);
-ini_set('session.use_only_cookies', 1);
-if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
-    ini_set('session.cookie_secure', 1); // Only set for HTTPS
-}
 
 // File upload limits (in bytes)
 define('MAX_INVOICE_SIZE', 20 * 1024 * 1024); // 20MB max for Pro plan
-// MAX_PHOTO_SIZE removed as per request
 define('ALLOWED_FILE_TYPES', ['pdf' => 'application/pdf', 'jpg' => 'image/jpeg', 'png' => 'image/png', 'mp4' => 'video/mp4']);
 ?>
