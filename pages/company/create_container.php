@@ -1,20 +1,25 @@
 <?php
 // File Path: qr-container-lock/pages/company/create_container.php
 
-session_start();
+// Start session with error handling
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+} else {
+    error_log("Session already started or failed to start");
+    $_SESSION = [];
+}
 require_once '../../includes/auth.php';
 require_once '../../config/config.php';
 
-// Enable error reporting for debugging
-ini_set('display_errors', 0); // Set to 0 in production
+// Enable error logging
+ini_set('display_errors', 0); // Disable for production
 ini_set('log_errors', 1);
 error_log("Starting create_container.php");
 
 // Define fallback constants
-if (!defined('MAX_PHOTO_SIZE')) define('MAX_PHOTO_SIZE', 5 * 1024 * 1024); // 5MB
-if (!defined('INVOICES_DIR')) define('INVOICES_DIR', __DIR__ . '/../uploads/invoices/');
-if (!defined('PHOTOS_DIR')) define('PHOTOS_DIR', __DIR__ . '/../Uploads/photos/');
-if (!defined('VIDEOS_DIR')) define('VIDEOS_DIR', __DIR__ . '/../Uploads/videos/');
+if (!defined('INVOICES_DIR')) define('INVOICES_DIR', __DIR__ . '/../../Uploads/invoices/');
+if (!defined('PHOTOS_DIR')) define('PHOTOS_DIR', __DIR__ . '/../../Uploads/photos/');
+if (!defined('VIDEOS_DIR')) define('VIDEOS_DIR', __DIR__ . '/../../Uploads/videos/');
 if (!defined('ALLOWED_FILE_TYPES')) {
     define('ALLOWED_FILE_TYPES', [
         'pdf' => 'application/pdf',
@@ -24,17 +29,24 @@ if (!defined('ALLOWED_FILE_TYPES')) {
     ]);
 }
 
-// Check required dependencies
-if (!function_exists('random_bytes')) {
-    error_log("Error: random_bytes function not available");
-    die("Server configuration error: random_bytes not available");
+// Check PDO connection
+if (!isset($pdo) || !$pdo instanceof PDO) {
+    error_log("Error: PDO connection not established in config.php");
+    $_SESSION['error'] = "Server error: Database connection failed.";
+    header("Location: dashboard.php");
+    exit;
 }
 
 // Ensure uploads directories exist and are writable
 $dirs = [INVOICES_DIR, PHOTOS_DIR, VIDEOS_DIR];
 foreach ($dirs as $dir) {
     if (!is_dir($dir)) {
-        @mkdir($dir, 0777, true);
+        if (!@mkdir($dir, 0777, true)) {
+            error_log("Error: Failed to create directory $dir");
+            $_SESSION['error'] = "Server error: Unable to create upload directory.";
+            header("Location: dashboard.php");
+            exit;
+        }
     }
     if (!is_writable($dir)) {
         error_log("Error: Directory $dir is not writable");
@@ -42,6 +54,14 @@ foreach ($dirs as $dir) {
         header("Location: dashboard.php");
         exit;
     }
+}
+
+// Check random_bytes availability
+if (!function_exists('random_bytes')) {
+    error_log("Error: random_bytes function not available");
+    $_SESSION['error'] = "Server configuration error: random_bytes not available.";
+    header("Location: dashboard.php");
+    exit;
 }
 
 requireLogin();
@@ -61,6 +81,8 @@ try {
         header("Location: dashboard.php");
         exit;
     }
+    // Set default plan values if missing
+    $plan += ['invoice_size_limit_mb' => 5, 'photos_per_container' => 5, 'video_upload_allowed' => 0];
 } catch (PDOException $e) {
     error_log("Database error (plan fetch): " . $e->getMessage());
     $_SESSION['error'] = "Database error: Unable to fetch plan.";
@@ -121,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         try {
             $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM containers WHERE company_id = ? AND MONTH(created_at) = MONTH(NOW())");
             $stmt->execute([$_SESSION['user_id']]);
-            $container_count = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
+            $container_count = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
             
             if ($plan['containers_per_month'] > 0 && $container_count >= $plan['containers_per_month']) {
                 $_SESSION['error'] = "Monthly container limit reached.";
@@ -138,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         // Handle invoice upload
         $invoice_path = '';
         $uploaded_files = [];
-        if (isset($_FILES['invoice']) && $_FILES['invoice']['error'] === UPLOAD_ERR_OK) {
+        if (isset($_FILES['invoice']) && is_array($_FILES['invoice']) && $_FILES['invoice']['error'] === UPLOAD_ERR_OK) {
             $file_size = $_FILES['invoice']['size'];
             $file_type = mime_content_type($_FILES['invoice']['tmp_name']);
             
@@ -162,25 +184,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         
         // Handle photo uploads
         $photo_paths = [];
-        if (isset($_FILES['photos']) && !empty($_FILES['photos']['name'][0])) {
+        if (isset($_FILES['photos']) && is_array($_FILES['photos']) && !empty($_FILES['photos']['name'][0])) {
             $photo_count = count($_FILES['photos']['name']);
             if ($photo_count > $plan['photos_per_container']) {
                 $_SESSION['error'] = "Too many photos. Maximum allowed: {$plan['photos_per_container']}.";
             } else {
                 foreach ($_FILES['photos']['tmp_name'] as $index => $tmp_name) {
-                    if ($_FILES['photos']['error'][$index] === UPLOAD_ERR_OK) {
-                        $file_size = $_FILES['photos']['size'][$index];
+                    if (isset($_FILES['photos']['error'][$index]) && $_FILES['photos']['error'][$index] === UPLOAD_ERR_OK) {
                         $file_type = mime_content_type($tmp_name);
                         
-                        if ($file_size > MAX_PHOTO_SIZE) {
-                            $_SESSION['error'] = "Photo {$index + 1} exceeds size limit (" . (MAX_PHOTO_SIZE / (1024 * 1024)) . " MB).";
-                            foreach ($photo_paths as $photo_path) {
-                                if (file_exists($photo_path)) {
-                                    unlink($photo_path);
-                                }
-                            }
-                            break;
-                        } elseif (!in_array($file_type, [ALLOWED_FILE_TYPES['jpg'], ALLOWED_FILE_TYPES['png']])) {
+                        if (!in_array($file_type, [ALLOWED_FILE_TYPES['jpg'], ALLOWED_FILE_TYPES['png']])) {
                             $_SESSION['error'] = "Photo {$index + 1} must be JPG or PNG.";
                             foreach ($photo_paths as $photo_path) {
                                 if (file_exists($photo_path)) {
@@ -204,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 $uploaded_files[] = $photo_path;
                             }
                         }
-                    } elseif ($_FILES['photos']['error'][$index] !== UPLOAD_ERR_NO_FILE) {
+                    } elseif (isset($_FILES['photos']['error'][$index]) && $_FILES['photos']['error'][$index] !== UPLOAD_ERR_NO_FILE) {
                         error_log("Photo {$index + 1} upload error: " . $_FILES['photos']['error'][$index]);
                         $_SESSION['error'] = "Photo {$index + 1} upload error: " . $_FILES['photos']['error'][$index];
                         foreach ($photo_paths as $photo_path) {
@@ -220,13 +233,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         
         // Handle video upload (if allowed)
         $video_path = '';
-        if ($plan['video_upload_allowed'] && isset($_FILES['video']) && $_FILES['video']['error'] === UPLOAD_ERR_OK) {
-            $file_size = $_FILES['video']['size'];
+        if ($plan['video_upload_allowed'] && isset($_FILES['video']) && is_array($_FILES['video']) && $_FILES['video']['error'] === UPLOAD_ERR_OK) {
             $file_type = mime_content_type($_FILES['video']['tmp_name']);
             
-            if ($file_size > MAX_PHOTO_SIZE) {
-                $_SESSION['error'] = "Video file exceeds size limit (" . (MAX_PHOTO_SIZE / (1024 * 1024)) . " MB).";
-            } elseif (!in_array($file_type, [ALLOWED_FILE_TYPES['mp4']])) {
+            if (!in_array($file_type, [ALLOWED_FILE_TYPES['mp4']])) {
                 $_SESSION['error'] = "Only MP4 videos are allowed.";
             } else {
                 $video_path = VIDEOS_DIR . time() . '_' . basename($_FILES['video']['name']);
@@ -314,6 +324,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <a href="dashboard.php" class="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700">Back to Dashboard</a>
         </div>
         
+        <?php if (isset($_SESSION['success'])): ?>
+            <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6" role="alert">
+                <?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?>
+            </div>
+        <?php endif; ?>
         <?php if (isset($_SESSION['error'])): ?>
             <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
                 <?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?>
@@ -340,12 +355,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     <input type="file" name="invoice" class="mt-1 block w-full text-gray-500" accept=".pdf">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700">Photos (JPG/PNG, max <?php echo htmlspecialchars($plan['photos_per_container']); ?> files, <?php echo (MAX_PHOTO_SIZE / (1024 * 1024)); ?> MB each)</label>
+                    <label class="block text-sm font-medium text-gray-700">Photos (JPG/PNG, max <?php echo htmlspecialchars($plan['photos_per_container']); ?> files)</label>
                     <input type="file" name="photos[]" multiple class="mt-1 block w-full text-gray-500" accept=".jpg,.png">
                 </div>
                 <?php if ($plan['video_upload_allowed']): ?>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">Video (MP4, max <?php echo (MAX_PHOTO_SIZE / (1024 * 1024)); ?> MB)</label>
+                        <label class="block text-sm font-medium text-gray-700">Video (MP4)</label>
                         <input type="file" name="video" class="mt-1 block w-full text-gray-500" accept=".mp4">
                     </div>
                 <?php endif; ?>
