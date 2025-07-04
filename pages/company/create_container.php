@@ -13,7 +13,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 } else {
     error_log("Session already started or failed to start in create_container.php");
-    $_SESSION = [];
+    $_SESSION = array();
 }
 require_once '../../includes/auth.php';
 require_once '../../config/config.php';
@@ -23,12 +23,12 @@ ini_set('display_errors', 0); // Disable for production
 ini_set('log_errors', 1);
 error_log("Starting create_container.php");
 
-// Adjust upload paths to match config.php
+// Use config.php defined directories
 define('LOCAL_INVOICES_DIR', INVOICES_DIR);
 define('LOCAL_PHOTOS_DIR', PHOTOS_DIR);
 define('LOCAL_VIDEOS_DIR', VIDEOS_DIR);
 
-// Check PDO connection
+// Validate PDO connection
 if (!isset($pdo) || !$pdo instanceof PDO) {
     error_log("Error: PDO connection not established in create_container.php");
     $_SESSION['error'] = "Server error: Database connection failed.";
@@ -36,18 +36,18 @@ if (!isset($pdo) || !$pdo instanceof PDO) {
     exit;
 }
 
-// Ensure upload directories are writable
-$dirs = [LOCAL_INVOICES_DIR, LOCAL_PHOTOS_DIR, LOCAL_VIDEOS_DIR];
-foreach ($dirs as $dir) {
-    if (!is_writable($dir)) {
-        error_log("Error: Directory $dir is not writable in create_container.php");
-        $_SESSION['error'] = "Server error: Upload directory not writable.";
+// Verify upload directories are writable
+$upload_dirs = array(LOCAL_INVOICES_DIR, LOCAL_PHOTOS_DIR, LOCAL_VIDEOS_DIR);
+foreach ($upload_dirs as $dir) {
+    if (!is_dir($dir) || !is_writable($dir)) {
+        error_log("Error: Directory $dir is not writable or does not exist in create_container.php");
+        $_SESSION['error'] = "Server error: Upload directory not writable or missing.";
         header("Location: dashboard.php");
         exit;
     }
 }
 
-// Check random_bytes availability
+// Check for required functions
 if (!function_exists('random_bytes')) {
     error_log("Error: random_bytes function not available in create_container.php");
     $_SESSION['error'] = "Server configuration error: random_bytes not available.";
@@ -64,7 +64,7 @@ if (isAdmin()) {
 // Fetch company plan details
 try {
     $stmt = $pdo->prepare("SELECT p.* FROM companies c JOIN plans p ON c.plan_id = p.id WHERE c.id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute(array($_SESSION['user_id']));
     $plan = $stmt->fetch(PDO::FETCH_ASSOC);
     if (!$plan) {
         error_log("Error: No plan found for user ID {$_SESSION['user_id']} in create_container.php");
@@ -72,8 +72,12 @@ try {
         header("Location: dashboard.php");
         exit;
     }
-    // Set default plan values if missing
-    $plan += ['invoice_size_limit_mb' => 5, 'photos_per_container' => 5, 'video_upload_allowed' => 0];
+    // Default plan values
+    $plan = array_merge(array(
+        'invoice_size_limit_mb' => 5,
+        'photos_per_container' => 5,
+        'video_upload_allowed' => 0
+    ), $plan);
 } catch (PDOException $e) {
     error_log("Database error (plan fetch) in create_container.php: " . $e->getMessage());
     $_SESSION['error'] = "Database error: Unable to fetch plan.";
@@ -86,12 +90,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $container_id = filter_input(INPUT_POST, 'container_id', FILTER_SANITIZE_STRING);
     $description = filter_input(INPUT_POST, 'description', FILTER_SANITIZE_STRING);
     $destination = filter_input(INPUT_POST, 'destination', FILTER_SANITIZE_STRING);
-    
+
     // Generate unique token
     try {
         $token = bin2hex(random_bytes(16));
         $stmt = $pdo->prepare("SELECT id FROM containers WHERE token = ?");
-        $stmt->execute([$token]);
+        $stmt->execute(array($token));
         if ($stmt->rowCount() > 0) {
             error_log("Error: Token collision for token $token in create_container.php");
             $_SESSION['error'] = "Token collision detected. Please try again.";
@@ -109,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         header("Location: create_container.php");
         exit;
     }
-    
+
     // Validate inputs
     if (empty($container_id) || empty($description) || empty($destination)) {
         $_SESSION['error'] = "All fields are required.";
@@ -117,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         // Check container_id uniqueness
         try {
             $stmt = $pdo->prepare("SELECT id FROM containers WHERE company_id = ? AND container_id = ?");
-            $stmt->execute([$_SESSION['user_id'], $container_id]);
+            $stmt->execute(array($_SESSION['user_id'], $container_id));
             if ($stmt->rowCount() > 0) {
                 $_SESSION['error'] = "Container ID already exists.";
                 header("Location: create_container.php");
@@ -129,14 +133,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             header("Location: create_container.php");
             exit;
         }
-        
+
         // Check container limit
         try {
             $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM containers WHERE company_id = ? AND MONTH(created_at) = MONTH(NOW())");
-            $stmt->execute([$_SESSION['user_id']]);
+            $stmt->execute(array($_SESSION['user_id']));
             $container_count = $stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0;
-            
-            if ($plan['containers_per_month'] > 0 && $container_count >= $plan['containers_per_month']) {
+            if (isset($plan['containers_per_month']) && $plan['containers_per_month'] > 0 && $container_count >= $plan['containers_per_month']) {
                 $_SESSION['error'] = "Monthly container limit reached.";
                 header("Location: create_container.php");
                 exit;
@@ -147,17 +150,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             header("Location: create_container.php");
             exit;
         }
-        
+
         // Handle invoice upload
         $invoice_path = '';
-        $uploaded_files = [];
+        $uploaded_files = array();
         if (isset($_FILES['invoice']) && is_array($_FILES['invoice']) && $_FILES['invoice']['error'] === UPLOAD_ERR_OK) {
             $file_size = $_FILES['invoice']['size'];
             $file_type = mime_content_type($_FILES['invoice']['tmp_name']);
-            
             if ($file_size > MAX_INVOICE_SIZE) {
                 $_SESSION['error'] = "Invoice file exceeds size limit (" . (MAX_INVOICE_SIZE / (1024 * 1024)) . " MB).";
-            } elseif (!in_array($file_type, [ALLOWED_FILE_TYPES['pdf']])) {
+            } elseif (!in_array($file_type, array(ALLOWED_FILE_TYPES['pdf']))) {
                 $_SESSION['error'] = "Only PDF files are allowed for invoices.";
             } else {
                 $invoice_path = LOCAL_INVOICES_DIR . time() . '_' . basename($_FILES['invoice']['name']);
@@ -172,20 +174,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             error_log("Invoice upload error in create_container.php: " . $_FILES['invoice']['error']);
             $_SESSION['error'] = "Invoice upload error: " . $_FILES['invoice']['error'];
         }
-        
+
         // Handle photo uploads
-        $photo_paths = [];
+        $photo_paths = array();
         if (isset($_FILES['photos']) && is_array($_FILES['photos']) && !empty($_FILES['photos']['name'][0])) {
             $photo_count = count($_FILES['photos']['name']);
             if ($photo_count > $plan['photos_per_container']) {
-                $_SESSION['error'] = "Too many photos. Maximum allowed: {$plan['photos_per_container']}.";
+                $_SESSION['error'] = "Too many photos. Maximum allowed: " . $plan['photos_per_container'] . ".";
             } else {
                 foreach ($_FILES['photos']['tmp_name'] as $index => $tmp_name) {
                     if (isset($_FILES['photos']['error'][$index]) && $_FILES['photos']['error'][$index] === UPLOAD_ERR_OK) {
                         $file_type = mime_content_type($tmp_name);
-                        
-                        if (!in_array($file_type, [ALLOWED_FILE_TYPES['jpg'], ALLOWED_FILE_TYPES['png']])) {
-                            $_SESSION['error'] = "Photo {$index + 1} must be JPG or PNG.";
+                        if (!in_array($file_type, array(ALLOWED_FILE_TYPES['jpg'], ALLOWED_FILE_TYPES['png']))) {
+                            $_SESSION['error'] = "Photo " . ($index + 1) . " must be JPG or PNG.";
                             foreach ($photo_paths as $photo_path) {
                                 if (file_exists($photo_path)) {
                                     unlink($photo_path);
@@ -196,7 +197,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             $photo_path = LOCAL_PHOTOS_DIR . time() . '_' . basename($_FILES['photos']['name'][$index]);
                             if (!move_uploaded_file($tmp_name, $photo_path)) {
                                 error_log("Error: Failed to move photo file to $photo_path in create_container.php");
-                                $_SESSION['error'] = "Failed to upload photo {$index + 1}.";
+                                $_SESSION['error'] = "Failed to upload photo " . ($index + 1) . ".";
                                 foreach ($photo_paths as $photo_path) {
                                     if (file_exists($photo_path)) {
                                         unlink($photo_path);
@@ -209,8 +210,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             }
                         }
                     } elseif (isset($_FILES['photos']['error'][$index]) && $_FILES['photos']['error'][$index] !== UPLOAD_ERR_NO_FILE) {
-                        error_log("Photo {$index + 1} upload error in create_container.php: " . $_FILES['photos']['error'][$index]);
-                        $_SESSION['error'] = "Photo {$index + 1} upload error: " . $_FILES['photos']['error'][$index];
+                        error_log("Photo " . ($index + 1) . " upload error in create_container.php: " . $_FILES['photos']['error'][$index]);
+                        $_SESSION['error'] = "Photo " . ($index + 1) . " upload error: " . $_FILES['photos']['error'][$index];
                         foreach ($photo_paths as $photo_path) {
                             if (file_exists($photo_path)) {
                                 unlink($photo_path);
@@ -221,13 +222,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
             }
         }
-        
-        // Handle video upload (if allowed)
+
+        // Handle video upload
         $video_path = '';
         if ($plan['video_upload_allowed'] && isset($_FILES['video']) && is_array($_FILES['video']) && $_FILES['video']['error'] === UPLOAD_ERR_OK) {
             $file_type = mime_content_type($_FILES['video']['tmp_name']);
-            
-            if (!in_array($file_type, [ALLOWED_FILE_TYPES['mp4']])) {
+            if (!in_array($file_type, array(ALLOWED_FILE_TYPES['mp4']))) {
                 $_SESSION['error'] = "Only MP4 videos are allowed.";
             } else {
                 $video_path = LOCAL_VIDEOS_DIR . time() . '_' . basename($_FILES['video']['name']);
@@ -242,27 +242,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             error_log("Video upload error in create_container.php: " . $_FILES['video']['error']);
             $_SESSION['error'] = "Video upload error: " . $_FILES['video']['error'];
         }
-        
+
         // Insert container if no errors
         if (!isset($_SESSION['error'])) {
             try {
-                $stmt = $pdo->prepare("INSERT INTO containers (company_id, container_id, description, destination, invoice_path, token, status) 
-                                       VALUES (?, ?, ?, ?, ?, ?, 'pending')");
-                if ($stmt->execute([$_SESSION['user_id'], $container_id, $description, $destination, $invoice_path, $token])) {
+                $stmt = $pdo->prepare("INSERT INTO containers (company_id, container_id, description, destination, invoice_path, token, status) VALUES (?, ?, ?, ?, ?, ?, 'pending')");
+                if ($stmt->execute(array($_SESSION['user_id'], $container_id, $description, $destination, $invoice_path, $token))) {
                     $new_container_id = $pdo->lastInsertId();
-                    
-                    // Insert photos
                     foreach ($photo_paths as $photo_path) {
                         $stmt = $pdo->prepare("INSERT INTO photos (container_id, photo_path) VALUES (?, ?)");
-                        $stmt->execute([$new_container_id, $photo_path]);
+                        $stmt->execute(array($new_container_id, $photo_path));
                     }
-                    
-                    // Insert video
                     if ($video_path) {
                         $stmt = $pdo->prepare("INSERT INTO videos (container_id, video_path) VALUES (?, ?)");
-                        $stmt->execute([$new_container_id, $video_path]);
+                        $stmt->execute(array($new_container_id, $video_path));
                     }
-                    
                     $_SESSION['success'] = "Container created successfully! Awaiting admin approval.";
                     header("Location: dashboard.php");
                     exit;
@@ -285,16 +279,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
             }
         }
-    }
-    
-    if (isset($_SESSION['error'])) {
-        foreach ($uploaded_files as $file) {
-            if (file_exists($file)) {
-                unlink($file);
+
+        if (isset($_SESSION['error'])) {
+            foreach ($uploaded_files as $file) {
+                if (file_exists($file)) {
+                    unlink($file);
+                }
             }
+            header("Location: create_container.php");
+            exit;
         }
-        header("Location: create_container.php");
-        exit;
     }
 }
 ?>
@@ -314,7 +308,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <h1 class="text-2xl font-bold text-gray-800">Create New Container</h1>
             <a href="dashboard.php" class="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700">Back to Dashboard</a>
         </div>
-        
         <?php if (isset($_SESSION['success'])): ?>
             <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6" role="alert">
                 <?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?>
@@ -325,7 +318,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 <?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?>
             </div>
         <?php endif; ?>
-        
         <div class="bg-white shadow-md rounded-lg p-6">
             <form method="POST" enctype="multipart/form-data" class="space-y-4">
                 <input type="hidden" name="action" value="create_container">
