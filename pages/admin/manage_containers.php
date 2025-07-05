@@ -44,14 +44,29 @@ try {
     $_SESSION['error'] = "Database error: Unable to fetch containers.";
 }
 
-// Handle container status update
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], array('approve', 'reject', 'generate_qr'))) {
+// Handle container actions
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $container_id = filter_input(INPUT_POST, 'container_id', FILTER_VALIDATE_INT);
-    $new_status = ($_POST['action'] === 'approve') ? 'approved' : 'rejected';
 
     if ($container_id) {
         try {
-            if ($_POST['action'] === 'generate_qr' && $new_status === 'approved') {
+            if ($_POST['action'] === 'approve') {
+                $stmt = $pdo->prepare("UPDATE containers SET status = 'approved' WHERE id = ?");
+                if ($stmt->execute(array($container_id))) {
+                    $_SESSION['success'] = "Container status updated to approved successfully.";
+                } else {
+                    error_log("Error: Failed to approve container ID $container_id in manage_containers.php");
+                    $_SESSION['error'] = "Failed to approve container.";
+                }
+            } elseif ($_POST['action'] === 'reject') {
+                $stmt = $pdo->prepare("UPDATE containers SET status = 'rejected' WHERE id = ?");
+                if ($stmt->execute(array($container_id))) {
+                    $_SESSION['success'] = "Container status updated to rejected successfully.";
+                } else {
+                    error_log("Error: Failed to reject container ID $container_id in manage_containers.php");
+                    $_SESSION['error'] = "Failed to reject container.";
+                }
+            } elseif ($_POST['action'] === 'generate_qr') {
                 $stmt = $pdo->prepare("SELECT token FROM containers WHERE id = ? AND status = 'approved'");
                 $stmt->execute(array($container_id));
                 $container = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -60,22 +75,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                     $qr_code_url = BASE_URL . 'pages/public/view.php?token=' . $token;
                     $qr_code_path = QRCODES_DIR . 'qr_' . $container_id . '_' . time() . '.png';
                     QRcode::png($qr_code_url, $qr_code_path, QR_ECLEVEL_L, 4);
-                    $_SESSION['success'] = "QR code generated and saved at <a href='" . htmlspecialchars($qr_code_path) . "' download>Download</a>.";
+                    $view_link = '<a href="' . htmlspecialchars(BASE_URL . 'pages/public/view.php?token=' . $token) . '" target="_blank">View Container</a>';
+                    $_SESSION['success'] = "QR code generated. $view_link or <a href='" . htmlspecialchars($qr_code_path) . "' download>Download QR</a>.";
                 } else {
-                    $_SESSION['error'] = "Cannot generate QR code for unapproved container.";
-                }
-            } else {
-                $stmt = $pdo->prepare("UPDATE containers SET status = ? WHERE id = ?");
-                if ($stmt->execute(array($new_status, $container_id))) {
-                    $_SESSION['success'] = "Container status updated to $new_status successfully.";
-                } else {
-                    error_log("Error: Failed to update container status for ID $container_id in manage_containers.php");
-                    $_SESSION['error'] = "Failed to update container status.";
+                    $_SESSION['error'] = "Cannot generate QR code for unapproved or invalid container.";
                 }
             }
         } catch (PDOException $e) {
-            error_log("Database error (update status) in manage_containers.php: " . $e->getMessage());
-            $_SESSION['error'] = "Database error: Unable to update container status.";
+            error_log("Database error in manage_containers.php: " . $e->getMessage());
+            $_SESSION['error'] = "Database error: Unable to process action.";
         } catch (Exception $e) {
             error_log("QR code generation error in manage_containers.php: " . $e->getMessage());
             $_SESSION['error'] = "Failed to generate QR code.";
@@ -106,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
 
         <?php if (isset($_SESSION['success'])): ?>
             <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6" role="alert">
-                <?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?>
+                <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
             </div>
         <?php endif; ?>
         <?php if (isset($_SESSION['error'])): ?>
