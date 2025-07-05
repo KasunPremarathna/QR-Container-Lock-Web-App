@@ -22,12 +22,12 @@ if ($token) {
         $container = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($container) {
             // Fetch photos
-            $stmt = $pdo->prepare("SELECT path FROM photos WHERE container_id = ?");
+            $stmt = $pdo->prepare("SELECT photo_path FROM photos WHERE container_id = ?");
             $stmt->execute(array($container['id']));
             $photos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             // Fetch videos
-            $stmt = $pdo->prepare("SELECT path FROM videos WHERE container_id = ?");
+            $stmt = $pdo->prepare("SELECT video_path FROM videos WHERE container_id = ?");
             $stmt->execute(array($container['id']));
             $videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } else {
@@ -79,7 +79,7 @@ if ($token) {
                     <p class="mt-4">
                         <strong>Photos:</strong>
                         <?php foreach ($photos as $photo): ?>
-                            <img src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $photo['path']); ?>" alt="Container Photo" class="mt-2 max-w-xs inline-block mr-2">
+                            <img src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $photo['photo_path']); ?>" alt="Container Photo" class="mt-2 max-w-xs inline-block mr-2">
                         <?php endforeach; ?>
                     </p>
                 <?php endif; ?>
@@ -89,7 +89,7 @@ if ($token) {
                         <strong>Videos:</strong>
                         <?php foreach ($videos as $video): ?>
                             <video controls class="mt-2 max-w-xs inline-block mr-2">
-                                <source src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $video['path']); ?>" type="video/mp4">
+                                <source src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $video['video_path']); ?>" type="video/mp4">
                                 Your browser does not support the video tag.
                             </video>
                         <?php endforeach; ?>
