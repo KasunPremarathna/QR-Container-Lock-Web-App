@@ -14,7 +14,7 @@ $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
 
 if ($token) {
     try {
-        $stmt = $pdo->prepare("SELECT id, container_id, description, destination, status FROM containers WHERE token = ? AND status != 'rejected'");
+        $stmt = $pdo->prepare("SELECT id, container_id, description, destination, status, invoice_path, photo_path, video_path FROM containers WHERE token = ? AND status != 'rejected'");
         $stmt->execute(array($token));
         $container = $stmt->fetch(PDO::FETCH_ASSOC);
         if (!$container) {
@@ -52,6 +52,32 @@ if ($token) {
                 <p><strong>Description:</strong> <?php echo htmlspecialchars($container['description']); ?></p>
                 <p><strong>Destination:</strong> <?php echo htmlspecialchars($container['destination']); ?></p>
                 <p><strong>Status:</strong> <?php echo htmlspecialchars($container['status']); ?></p>
+
+                <?php if ($container['invoice_path']): ?>
+                    <p class="mt-4">
+                        <strong>Invoice:</strong>
+                        <a href="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $container['invoice_path']); ?>" target="_blank" class="text-blue-500 hover:underline">
+                            Download Invoice
+                        </a>
+                    </p>
+                <?php endif; ?>
+
+                <?php if ($container['photo_path']): ?>
+                    <p class="mt-4">
+                        <strong>Photo:</strong>
+                        <img src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $container['photo_path']); ?>" alt="Container Photo" class="mt-2 max-w-xs">
+                    </p>
+                <?php endif; ?>
+
+                <?php if ($container['video_path']): ?>
+                    <p class="mt-4">
+                        <strong>Video:</strong>
+                        <video controls class="mt-2 max-w-xs">
+                            <source src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $container['video_path']); ?>" type="video/mp4">
+                            Your browser does not support the video tag.
+                        </video>
+                    </p>
+                <?php endif; ?>
             </div>
         <?php else: ?>
             <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6" role="alert">
