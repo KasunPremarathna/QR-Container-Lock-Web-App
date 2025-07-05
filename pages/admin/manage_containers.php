@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 if ($container) {
                     $token = $container['token'];
                     $base_qr_path = '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/qrcodes/qr_' . $container_id . '.png';
-                    $web_qr_path = 'config/uploads/qrcodes/qr_' . $container_id . '.png';
+                    $web_qr_path = BASE_URL . 'config/uploads/qrcodes/qr_' . $container_id . '.png';
 
                     if (!$container['qr_path']) {
                         // Generate QR code only if it doesn't exist
@@ -173,8 +173,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                             <button type="submit" class="bg-blue-500 text-white py-1 px-2 rounded-md hover:bg-blue-600">Generate QR Code</button>
                                         </form>
                                     <?php else: ?>
-                                        <a href="<?php echo htmlspecialchars('config/uploads/qrcodes/qr_' . $container['id'] . '.png'); ?>" target="_blank" class="bg-yellow-500 text-white py-1 px-2 rounded-md hover:bg-yellow-600 inline-block mr-2">View QR</a>
-                                        <a href="<?php echo htmlspecialchars('config/uploads/qrcodes/qr_' . $container['id'] . '.png'); ?>" download class="bg-green-500 text-white py-1 px-2 rounded-md hover:bg-green-600 inline-block">Download QR</a>
+                                        <a href="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/qrcodes/qr_' . $container['id'] . '.png'); ?>" target="_blank" class="bg-yellow-500 text-white py-1 px-2 rounded-md hover:bg-yellow-600 inline-block mr-2">View QR</a>
+                                        <a href="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/qrcodes/qr_' . $container['id'] . '.png'); ?>" download class="bg-green-500 text-white py-1 px-2 rounded-md hover:bg-green-600 inline-block">Download QR</a>
                                     <?php endif; ?>
                                 <?php else: ?>
                                     <span class="text-gray-500">N/A</span>
@@ -193,4 +193,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     </div>
 </body>
 </html>
+
 ?>
