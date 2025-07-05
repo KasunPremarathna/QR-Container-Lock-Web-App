@@ -21,6 +21,11 @@ if ($token) {
         $stmt->execute(array($token));
         $container = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($container) {
+            // Extract relative path if full path is stored
+            if ($container['invoice_path'] && strpos($container['invoice_path'], '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/') === 0) {
+                $container['invoice_path'] = substr($container['invoice_path'], strlen('/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/'));
+            }
+
             // Fetch photos
             $stmt = $pdo->prepare("SELECT photo_path FROM photos WHERE container_id = ?");
             $stmt->execute(array($container['id']));
