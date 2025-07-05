@@ -21,7 +21,7 @@ if ($token) {
         $stmt->execute(array($token));
         $container = $stmt->fetch(PDO::FETCH_ASSOC);
         if ($container) {
-            // Extract relative path if full path is stored
+            // Extract relative path if full path is stored for invoice
             if ($container['invoice_path'] && strpos($container['invoice_path'], '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/') === 0) {
                 $container['invoice_path'] = substr($container['invoice_path'], strlen('/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/'));
             }
@@ -30,11 +30,23 @@ if ($token) {
             $stmt = $pdo->prepare("SELECT photo_path FROM photos WHERE container_id = ?");
             $stmt->execute(array($container['id']));
             $photos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Extract relative path if full path is stored for photos
+            foreach ($photos as &$photo) {
+                if (strpos($photo['photo_path'], '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/') === 0) {
+                    $photo['photo_path'] = substr($photo['photo_path'], strlen('/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/'));
+                }
+            }
 
             // Fetch videos
             $stmt = $pdo->prepare("SELECT video_path FROM videos WHERE container_id = ?");
             $stmt->execute(array($container['id']));
             $videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Extract relative path if full path is stored for videos
+            foreach ($videos as &$video) {
+                if (strpos($video['video_path'], '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/') === 0) {
+                    $video['video_path'] = substr($video['video_path'], strlen('/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/'));
+                }
+            }
         } else {
             error_log("Error: Invalid or rejected token $token in view.php");
             $error = "Invalid QR code or container not found.";
