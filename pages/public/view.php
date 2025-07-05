@@ -24,16 +24,19 @@ if ($token) {
             // Extract relative path if full path is stored for invoice
             if ($container['invoice_path'] && strpos($container['invoice_path'], '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/') === 0) {
                 $container['invoice_path'] = substr($container['invoice_path'], strlen('/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/'));
+                error_log("Corrected invoice_path to relative: " . $container['invoice_path']);
             }
 
             // Fetch photos
             $stmt = $pdo->prepare("SELECT photo_path FROM photos WHERE container_id = ?");
             $stmt->execute(array($container['id']));
             $photos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            error_log("Fetched " . count($photos) . " photos for container_id " . $container['id']);
             // Extract relative path if full path is stored for photos
             foreach ($photos as &$photo) {
                 if (strpos($photo['photo_path'], '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/') === 0) {
                     $photo['photo_path'] = substr($photo['photo_path'], strlen('/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/'));
+                    error_log("Corrected photo_path to relative: " . $photo['photo_path']);
                 }
             }
 
@@ -41,10 +44,12 @@ if ($token) {
             $stmt = $pdo->prepare("SELECT video_path FROM videos WHERE container_id = ?");
             $stmt->execute(array($container['id']));
             $videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            error_log("Fetched " . count($videos) . " videos for container_id " . $container['id']);
             // Extract relative path if full path is stored for videos
             foreach ($videos as &$video) {
                 if (strpos($video['video_path'], '/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/') === 0) {
                     $video['video_path'] = substr($video['video_path'], strlen('/home/kasunpre/qrlock.kasunpremarathna.com/config/uploads/'));
+                    error_log("Corrected video_path to relative: " . $video['video_path']);
                 }
             }
         } else {
