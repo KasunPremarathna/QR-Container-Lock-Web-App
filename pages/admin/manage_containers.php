@@ -67,16 +67,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $_SESSION['error'] = "Failed to reject container.";
                 }
             } elseif ($_POST['action'] === 'generate_qr') {
-                $stmt = $pdo->prepare("SELECT token FROM containers WHERE id = ? AND status = 'approved'");
+                $stmt = $pdo->prepare("SELECT token, qr_path FROM containers WHERE id = ? AND status = 'approved'");
                 $stmt->execute(array($container_id));
                 $container = $stmt->fetch(PDO::FETCH_ASSOC);
                 if ($container) {
                     $token = $container['token'];
                     $qr_code_url = BASE_URL . 'pages/public/view.php?token=' . $token;
-                    $qr_code_path = QRCODES_DIR . 'qr_' . $container_id . '_' . time() . '.png';
-                    QRcode::png($qr_code_url, $qr_code_path, QR_ECLEVEL_L, 4);
+                    $qr_code_path = $container['qr_path'] ?: QRCODES_DIR . 'qr_' . $container_id . '.png';
+
+                    if (!$container['qr_path']) {
+                        // Generate QR code only if it doesn't exist
+                        if (!file_exists($qr_code_path)) {
+                            QRcode::png($qr_code_url, $qr_code_path, QR_ECLEVEL_L, 4);
+                            $stmt = $pdo->prepare("UPDATE containers SET qr_path = ? WHERE id = ?");
+                            $stmt->execute(array($qr_code_path, $container_id));
+                        }
+                    }
                     $view_link = '<a href="' . htmlspecialchars(BASE_URL . 'pages/public/view.php?token=' . $token) . '" target="_blank">View Container</a>';
-                    $_SESSION['success'] = "QR code generated. $view_link or <a href='" . htmlspecialchars($qr_code_path) . "' download>Download QR</a>.";
+                    $download_link = '<a href="' . htmlspecialchars($qr_code_path) . '" download>Download QR</a>';
+                    $_SESSION['success'] = "QR code processed. $view_link or $download_link.";
                 } else {
                     $_SESSION['error'] = "Cannot generate QR code for unapproved or invalid container.";
                 }
@@ -156,11 +165,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                                         <button type="submit" class="bg-red-500 text-white py-1 px-2 rounded-md hover:bg-red-600">Reject</button>
                                     </form>
                                 <?php elseif ($container['status'] === 'approved'): ?>
-                                    <form method="POST" style="display:inline-block" onsubmit="return confirm('Generate QR code?');">
-                                        <input type="hidden" name="container_id" value="<?php echo htmlspecialchars($container['id']); ?>">
-                                        <input type="hidden" name="action" value="generate_qr">
-                                        <button type="submit" class="bg-blue-500 text-white py-1 px-2 rounded-md hover:bg-blue-600">Generate QR Code</button>
-                                    </form>
+                                    <?php if (!$container['qr_path']): ?>
+                                        <form method="POST" style="display:inline-block" onsubmit="return confirm('Generate QR code?');">
+                                            <input type="hidden" name="container_id" value="<?php echo htmlspecialchars($container['id']); ?>">
+                                            <input type="hidden" name="action" value="generate_qr">
+                                            <button type="submit" class="bg-blue-500 text-white py-1 px-2 rounded-md hover:bg-blue-600">Generate QR Code</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <a href="<?php echo htmlspecialchars($container['qr_path']); ?>" download class="bg-yellow-500 text-white py-1 px-2 rounded-md hover:bg-yellow-600 inline-block mr-2">View QR</a>
+                                        <a href="<?php echo htmlspecialchars($container['qr_path']); ?>" download class="bg-green-500 text-white py-1 px-2 rounded-md hover:bg-green-600 inline-block">Download QR</a>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span class="text-gray-500">N/A</span>
                                 <?php endif; ?>
