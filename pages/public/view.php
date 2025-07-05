@@ -10,20 +10,33 @@ require_once '../../config/config.php';
 
 // Initialize container data
 $container = null;
+$photos = [];
+$videos = [];
 $token = filter_input(INPUT_GET, 'token', FILTER_SANITIZE_STRING);
 
 if ($token) {
     try {
-        $stmt = $pdo->prepare("SELECT id, container_id, description, destination, status, invoice_path, photo_path, video_path FROM containers WHERE token = ? AND status != 'rejected'");
+        // Fetch container details
+        $stmt = $pdo->prepare("SELECT id, container_id, description, destination, status, invoice_path FROM containers WHERE token = ? AND status != 'rejected'");
         $stmt->execute(array($token));
         $container = $stmt->fetch(PDO::FETCH_ASSOC);
-        if (!$container) {
+        if ($container) {
+            // Fetch photos
+            $stmt = $pdo->prepare("SELECT path FROM photos WHERE container_id = ?");
+            $stmt->execute(array($container['id']));
+            $photos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Fetch videos
+            $stmt = $pdo->prepare("SELECT path FROM videos WHERE container_id = ?");
+            $stmt->execute(array($container['id']));
+            $videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } else {
             error_log("Error: Invalid or rejected token $token in view.php");
             $error = "Invalid QR code or container not found.";
         }
     } catch (PDOException $e) {
-        error_log("Database error (fetch container) in view.php: " . $e->getMessage());
-        $error = "Server error: Unable to fetch container details.";
+        error_log("Database error (fetch container or media) in view.php: " . $e->getMessage());
+        $error = "Server error: Unable to fetch container or media details.";
     }
 } else {
     $error = "No QR code token provided.";
@@ -62,20 +75,24 @@ if ($token) {
                     </p>
                 <?php endif; ?>
 
-                <?php if ($container['photo_path']): ?>
+                <?php if (!empty($photos)): ?>
                     <p class="mt-4">
-                        <strong>Photo:</strong>
-                        <img src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $container['photo_path']); ?>" alt="Container Photo" class="mt-2 max-w-xs">
+                        <strong>Photos:</strong>
+                        <?php foreach ($photos as $photo): ?>
+                            <img src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $photo['path']); ?>" alt="Container Photo" class="mt-2 max-w-xs inline-block mr-2">
+                        <?php endforeach; ?>
                     </p>
                 <?php endif; ?>
 
-                <?php if ($container['video_path']): ?>
+                <?php if (!empty($videos)): ?>
                     <p class="mt-4">
-                        <strong>Video:</strong>
-                        <video controls class="mt-2 max-w-xs">
-                            <source src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $container['video_path']); ?>" type="video/mp4">
-                            Your browser does not support the video tag.
-                        </video>
+                        <strong>Videos:</strong>
+                        <?php foreach ($videos as $video): ?>
+                            <video controls class="mt-2 max-w-xs inline-block mr-2">
+                                <source src="<?php echo htmlspecialchars(BASE_URL . 'config/uploads/' . $video['path']); ?>" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                        <?php endforeach; ?>
                     </p>
                 <?php endif; ?>
             </div>
