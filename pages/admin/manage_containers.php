@@ -18,6 +18,9 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once '../../includes/auth.php';
 require_once '../../config/config.php';
 
+// Include phpqrcode library
+require_once '../../lib/phpqrcode/qrlib.php';
+
 // Enable error logging
 ini_set('display_errors', 0); // Disable for production
 ini_set('log_errors', 1);
@@ -42,22 +45,40 @@ try {
 }
 
 // Handle container status update
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], array('approve', 'reject'))) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array($_POST['action'], array('approve', 'reject', 'generate_qr'))) {
     $container_id = filter_input(INPUT_POST, 'container_id', FILTER_VALIDATE_INT);
     $new_status = ($_POST['action'] === 'approve') ? 'approved' : 'rejected';
 
     if ($container_id) {
         try {
-            $stmt = $pdo->prepare("UPDATE containers SET status = ? WHERE id = ?");
-            if ($stmt->execute(array($new_status, $container_id))) {
-                $_SESSION['success'] = "Container status updated to $new_status successfully.";
+            if ($_POST['action'] === 'generate_qr' && $new_status === 'approved') {
+                $stmt = $pdo->prepare("SELECT token FROM containers WHERE id = ? AND status = 'approved'");
+                $stmt->execute(array($container_id));
+                $container = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($container) {
+                    $token = $container['token'];
+                    $qr_code_url = BASE_URL . 'pages/public/view.php?token=' . $token;
+                    $qr_code_path = QRCODES_DIR . 'qr_' . $container_id . '_' . time() . '.png';
+                    QRcode::png($qr_code_url, $qr_code_path, QR_ECLEVEL_L, 4);
+                    $_SESSION['success'] = "QR code generated and saved at <a href='" . htmlspecialchars($qr_code_path) . "' download>Download</a>.";
+                } else {
+                    $_SESSION['error'] = "Cannot generate QR code for unapproved container.";
+                }
             } else {
-                error_log("Error: Failed to update container status for ID $container_id in manage_containers.php");
-                $_SESSION['error'] = "Failed to update container status.";
+                $stmt = $pdo->prepare("UPDATE containers SET status = ? WHERE id = ?");
+                if ($stmt->execute(array($new_status, $container_id))) {
+                    $_SESSION['success'] = "Container status updated to $new_status successfully.";
+                } else {
+                    error_log("Error: Failed to update container status for ID $container_id in manage_containers.php");
+                    $_SESSION['error'] = "Failed to update container status.";
+                }
             }
         } catch (PDOException $e) {
             error_log("Database error (update status) in manage_containers.php: " . $e->getMessage());
             $_SESSION['error'] = "Database error: Unable to update container status.";
+        } catch (Exception $e) {
+            error_log("QR code generation error in manage_containers.php: " . $e->getMessage());
+            $_SESSION['error'] = "Failed to generate QR code.";
         }
     } else {
         $_SESSION['error'] = "Invalid container ID.";
@@ -125,6 +146,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && in_array
                                         <input type="hidden" name="container_id" value="<?php echo htmlspecialchars($container['id']); ?>">
                                         <input type="hidden" name="action" value="reject">
                                         <button type="submit" class="bg-red-500 text-white py-1 px-2 rounded-md hover:bg-red-600">Reject</button>
+                                    </form>
+                                <?php elseif ($container['status'] === 'approved'): ?>
+                                    <form method="POST" style="display:inline-block" onsubmit="return confirm('Generate QR code?');">
+                                        <input type="hidden" name="container_id" value="<?php echo htmlspecialchars($container['id']); ?>">
+                                        <input type="hidden" name="action" value="generate_qr">
+                                        <button type="submit" class="bg-blue-500 text-white py-1 px-2 rounded-md hover:bg-blue-600">Generate QR Code</button>
                                     </form>
                                 <?php else: ?>
                                     <span class="text-gray-500">N/A</span>
